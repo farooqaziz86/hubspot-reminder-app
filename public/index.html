@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HubSpot Reminder App</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    h1 { text-align: center; }
+    .upload-container { text-align: center; margin-top: 20px; }
+    input[type="file"] { margin: 10px; }
+    button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    #message { margin-top: 20px; color: green; }
+  </style>
+</head>
+<body>
+  <h1>HubSpot Reminder App</h1>
+  <div class="upload-container">
+    <form id="uploadForm" enctype="multipart/form-data">
+      <input type="file" id="csvFile" name="csvFile" accept=".csv" required>
+      <button type="submit">Upload CSV</button>
+    </form>
+    <div id="message"></div>
+  </div>
+  <script>
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData();
+      formData.append('csvFile', document.getElementById('csvFile').files[0]);
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const message = await response.text();
+        document.getElementById('message').textContent = message;
+      } catch (err) {
+        document.getElementById('message').textContent = 'Error uploading file.';
+        document.getElementById('message').style.color = 'red';
+      }
+    });
+  </script>
+</body>
+</html>
