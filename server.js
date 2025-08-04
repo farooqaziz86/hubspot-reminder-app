@@ -5,11 +5,19 @@ const csv = require('csv-parser');
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
-const sgMail = require('@sendgrid/mail');
+const nodemailer = require('nodemailer');
 const app = express();
 
-// Set SendGrid API Key
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+// Configure Nodemailer for Brevo SMTP
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USERNAME,
+    pass: process.env.SMTP_PASSWORD,
+  },
+});
 
 // MongoDB Schema
 const DealSchema = new mongoose.Schema({
@@ -21,9 +29,6 @@ const DealSchema = new mongoose.Schema({
   dealStage: String,
 });
 const Deal = mongoose.model('Deal', DealSchema);
-
-// Configure Multer for file uploads
-const upload = multer({ dest: 'uploads/' });
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -38,10 +43,15 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Route to handle CSV upload
+// Route to handle CSV upload with custom days threshold
 app.post('/upload', upload.single('csvFile'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).send('No file uploaded.');
+  if (!req.file || !req.body.daysThreshold) {
+    return res.status(400).send('No file or days threshold provided.');
+  }
+
+  const daysThreshold = parseInt(req.body.daysThreshold);
+  if (isNaN(daysThreshold) || daysThreshold <= 0) {
+    return res.status(400).send('Invalid days threshold.');
   }
 
   const results = [];
@@ -62,7 +72,9 @@ app.post('/upload', upload.single('csvFile'), async (req, res) => {
         await Deal.deleteMany({});
         await Deal.insertMany(results);
         fs.unlinkSync(req.file.path);
-        res.send('CSV uploaded and processed successfully.');
+        res.send(`CSV uploaded and processed successfully with ${daysThreshold} days threshold.`);
+        // Trigger immediate email check with the uploaded threshold
+        await sendReminderEmails(daysThreshold);
       } catch (err) {
         console.error(err);
         res.status(500).send('Error processing CSV.');
@@ -82,10 +94,9 @@ const ownerEmails = {
   'raafay.qureshi@postex.pk': 'raafay.qureshi@postex.pk',
 };
 const ccEmails = ['noshairwan.khan@postex.pk', 'farooq@xstak.com'];
-const daysThreshold = parseInt(process.env.DAYS_THRESHOLD) || 10;
 
 // Function to send reminder emails with summary
-async function sendReminderEmails() {
+async function sendReminderEmails(daysThreshold) {
   const thresholdDate = new Date();
   thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
 
@@ -108,15 +119,15 @@ async function sendReminderEmails() {
 
   for (const [email, dealNames] of Object.entries(emailMap)) {
     const msg = {
+      from: process.env.SENDER_EMAIL,
       to: email,
       cc: ccEmails,
-      from: process.env.SENDER_EMAIL,
       subject: `Reminder: Follow up on ${dealNames.length} inactive deals`,
       text: `Please contact the following deals:\n\n${dealNames.map(name => `- ${name}`).join('\n')}\n\nLast activity was over ${daysThreshold} days ago.`,
     };
 
     try {
-      await sgMail.send(msg);
+      await transporter.sendMail(msg);
       console.log(`Summary email sent to ${email} for ${dealNames.length} deals`);
     } catch (err) {
       console.error(`Error sending summary email to ${email}:`, err);
@@ -124,8 +135,8 @@ async function sendReminderEmails() {
   }
 }
 
-// Schedule email reminders daily at 9 AM CEST (7 AM UTC)
-cron.schedule('0 7 * * *', sendReminderEmails);
+// Schedule email reminders daily at 9 AM CEST (7 AM UTC) with default 10 days
+cron.schedule('0 7 * * *', () => sendReminderEmails(10));
 
 // Start server
 const PORT = process.env.PORT || 3000;
