@@ -8,7 +8,7 @@
     body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
     h1 { text-align: center; }
     .upload-container { text-align: center; margin-top: 20px; }
-    input[type="file"] { margin: 10px; }
+    input[type="file"], input[type="number"] { margin: 10px; }
     button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
     button:hover { background: #0056b3; }
     #message { margin-top: 20px; color: green; }
@@ -19,6 +19,7 @@
   <div class="upload-container">
     <form id="uploadForm" enctype="multipart/form-data">
       <input type="file" id="csvFile" name="csvFile" accept=".csv" required>
+      <input type="number" id="daysThreshold" name="daysThreshold" min="1" placeholder="Days threshold (e.g., 7)" required>
       <button type="submit">Upload CSV</button>
     </form>
     <div id="message"></div>
@@ -28,6 +29,7 @@
       e.preventDefault();
       const formData = new FormData();
       formData.append('csvFile', document.getElementById('csvFile').files[0]);
+      formData.append('daysThreshold', document.getElementById('daysThreshold').value);
       try {
         const response = await fetch('/upload', {
           method: 'POST',
